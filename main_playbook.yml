@@ -27,9 +27,8 @@
        - debug:
            msg: 'I caught an error, can do stuff here to fix it, :-)'
     
-    # block ends 
 
-    # STEP-2: get the configuration and keys to the target ec2 instance 
+    # STEP-2 A: get the configuration and keys to the target ec2 instance 
     # block to install dependencies for aws in remote host  
    - name: block executing in remote machine as privileged user
      block:
@@ -44,8 +43,48 @@
          name: boto3
          state: present
 
+    # block to collect information of aws ec2 instance   
+   - name: collect information about target ec2 instance.
+     block:
+     - name: collect facts about the instance using ec2 module
+       ec2_instance_facts:
+         aws_access_key: "{{  AWS_ACCESS_KEY  }}"
+         aws_secret_key: "{{  AWS_SECRET_KEY  }}"
+         region: "{{  AWS_REGION  }}"
+       register: current_instance_facts
+    
+    # this block saves the above response to a file in output folder 
+   - name: block executing in local machine as un-privileged user
+     block:
+     - name: copy the ec2 facts a json file in local machine 
+       copy:
+         content: "{{ current_instance_facts.instances[0] | to_yaml }}"
+         dest: "{{  OUTPUT_DIRECTORY  }}/instance_facts.yml"
+     - debug: msg="response saved to file instance_facts.yml \n{{current_instance_facts.instances[0]  }}"
+
+     connection: local
+     become: False
+     run_once: True 
+     rescue:
+       - debug:
+           msg: 'I caught an error, can do stuff here to fix it, :-)'
+
+
+    # STEP-2 B: copy the keys file from the target host to local machine. 
+    # block to copy keys from remote host to control machine  
+   - name: block executing in remote machine as un-privileged user
+     block:
+     - name: copy the authorized_keys file to outputs directory
+       fetch:
+         src: ~/.ssh/authorized_keys
+         dest: "{{  OUTPUT_DIRECTORY  }}/authorized_keys"
+         flat: yes
+     become: False
+     run_once: True
+     rescue:
+       - debug:
+           msg: 'I caught an error, can do stuff here to fix it, :-)' 
+   
+   
       
-
-
-
 ...
