@@ -10,71 +10,39 @@
   become: true
 
   tasks:
-   - name: block executing in local machine as unprevilidged user
+    # STEP-1: to save the groups of target host to a json file.
+    # block local machine start 
+   - name: block executing in local machine as un-privileged user
      block:
      - name: copy the groups the host belongs to a json file in local machine 
        copy:
-         content: "{ \"hosts_group\" : {{  BELONG_TO_GROUPS | to_json }} } "
+         content: "{ \"hosts_group\" : {{  BELONG_TO_GROUPS | to_json }} }"
          dest: "{{  OUTPUT_DIRECTORY  }}/groups.json"
+     - debug:
+         msg: "the ouput saved is { \"hosts_group\" : {{  BELONG_TO_GROUPS | to_json }} }" 
      connection: local
      become: False
-     run_once: True
+     run_once: True 
      rescue:
        - debug:
            msg: 'I caught an error, can do stuff here to fix it, :-)'
     
+    # block ends 
 
-    
+    # STEP-2: get the configuration and keys to the target ec2 instance 
+    # block to install dependencies for aws in remote host  
+   - name: block executing in remote machine as privileged user
+     block:
+     - name: check/install python3 and pip on the server
+       apt:
+         update_cache: yes
+         state: present 
+         name: [python3, python3-pip]
 
-  # - name: save the groups in which the current host(s) belongs to
-
-  
-    # block:
-    #   - name: executing in local machine as normal user
-    # connection: local
-    #   become: False
-    #   run_once: True
-    #   copy:
-    #       content: "{{  BELONG_TO_GROUPS }}" 
-    #       dest: /tmp/outputs/groups.txt   
-    # rescue:
-    #  - debug:
-    #      msg: 'I caught an error, can do stuff here to fix it, :-)'
-  
-    
-      # block:
-      #   - name: save the groups in which the current host(s) belongs to
-      #     connection: local
-      #     become: False
-      #     run_once: True
-      #     copy:
-      #       content: "{{  BELONG_TO_GROUPS }}" 
-      #       dest: /tmp/outputs/groups.txt   
-
-      #   local_action: 
-      # copy:
-      #   content: "{{  BELONG_TO_GROUPS }}" 
-      #   dest: /tmp/outputs/groups.txt   
-        # copy:
-        #   content: "{{ BELONG_TO_GROUPS }}"
-        #   dest: "{{OUTPUT_DIRECTORY}}/groups.txt"   
-      # connection: local
-      # become: False
-      # run_once: True
-    
-    # - debug:
-    #     msg: "The host belongs to follwing groups {{BELONG_TO_GROUPS}}"
-      
-    # - name: check/install python3 and pip on the server
-    #   apt:
-    #     update_cache: yes
-    #     state: present 
-    #     name: [python3, python3-pip]
-
-    # - name: install boto3 using pip 
-    #   pip: 
-    #     name: boto3
-    #     state: present
+     - name: install boto3 using pip 
+       pip: 
+         name: boto3
+         state: present
 
       
 
