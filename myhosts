@@ -1,0 +1,8 @@
+[web]
+13.126.138.186 ansible_ssh_user=ubuntu
+[db]
+13.126.138.186 ansible_ssh_user=ubuntu
+[annant]
+13.126.138.186 ansible_ssh_user=ubuntu
+[none]
+localhost ansible_ssh_user=ubuntu

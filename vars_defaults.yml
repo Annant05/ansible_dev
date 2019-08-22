@@ -1,0 +1,11 @@
+# Default vars for main_playbook.yml
+---
+# host and other local variables to be changes
+HOST_TO_REPLACE: 13.126.138.186
+BELONG_TO_GROUPS: "{{group_names}}"
+
+
+# Playbook current directory: 
+PLAYBOOK_PWD: "/mnt/c/Users/Annant Gupta/Desktop/roleAnsible"
+OUTPUT_DIRECTORY: "/mnt/c/Users/Annant Gupta/Desktop/roleAnsible/outputs"
+...

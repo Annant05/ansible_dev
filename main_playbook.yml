@@ -1,0 +1,83 @@
+---
+- name: the main playbook to be executed 
+
+  vars_files:
+    - vars_defaults.yml
+    - vars_aws_config.yml
+    # HOST_TO_REPLACE: 
+
+  hosts: "{{HOST_TO_REPLACE}}"
+  become: true
+
+  tasks:
+   - name: block executing in local machine as unprevilidged user
+     block:
+     - name: copy the groups the host belongs to a json file in local machine 
+       copy:
+         content: "{ \"hosts_group\" : {{  BELONG_TO_GROUPS | to_json }} } "
+         dest: "{{  OUTPUT_DIRECTORY  }}/groups.json"
+     connection: local
+     become: False
+     run_once: True
+     rescue:
+       - debug:
+           msg: 'I caught an error, can do stuff here to fix it, :-)'
+    
+
+    
+
+  # - name: save the groups in which the current host(s) belongs to
+
+  
+    # block:
+    #   - name: executing in local machine as normal user
+    # connection: local
+    #   become: False
+    #   run_once: True
+    #   copy:
+    #       content: "{{  BELONG_TO_GROUPS }}" 
+    #       dest: /tmp/outputs/groups.txt   
+    # rescue:
+    #  - debug:
+    #      msg: 'I caught an error, can do stuff here to fix it, :-)'
+  
+    
+      # block:
+      #   - name: save the groups in which the current host(s) belongs to
+      #     connection: local
+      #     become: False
+      #     run_once: True
+      #     copy:
+      #       content: "{{  BELONG_TO_GROUPS }}" 
+      #       dest: /tmp/outputs/groups.txt   
+
+      #   local_action: 
+      # copy:
+      #   content: "{{  BELONG_TO_GROUPS }}" 
+      #   dest: /tmp/outputs/groups.txt   
+        # copy:
+        #   content: "{{ BELONG_TO_GROUPS }}"
+        #   dest: "{{OUTPUT_DIRECTORY}}/groups.txt"   
+      # connection: local
+      # become: False
+      # run_once: True
+    
+    # - debug:
+    #     msg: "The host belongs to follwing groups {{BELONG_TO_GROUPS}}"
+      
+    # - name: check/install python3 and pip on the server
+    #   apt:
+    #     update_cache: yes
+    #     state: present 
+    #     name: [python3, python3-pip]
+
+    # - name: install boto3 using pip 
+    #   pip: 
+    #     name: boto3
+    #     state: present
+
+      
+
+
+
+...

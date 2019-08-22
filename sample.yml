@@ -1,0 +1,17 @@
+- name: this is to test temporary files tranfer and script run in an ec2
+  hosts: web
+  become: true
+
+  tasks: 
+    - name: Store file into /tmp/fetched/host.example.com/tmp/somefile
+      become_user: ubuntu
+      fetch:
+        src: ~/.ssh/authorized_keys
+        dest: /tmp/keys
+        flat: yes
+
+        # fail_on_missing: no
+    # - name: Run a script only if file.txt does not exist on the remote node
+    #   script:  print.sh
+    #   args:
+    #     creates: /tmp/myfile.txt

@@ -1,0 +1,38 @@
+- name: this is to test aws ec2 properties
+  hosts: web
+  become: true
+
+  tasks:
+    # - name: install python3, pip3
+    #   apt:
+    #     update_cache: yes
+    #     state: present 
+    #     name: [python3, python3-pip]
+    
+    # - name: install boto3 using pip 
+    #   pip: 
+    #     name: boto3
+    #     state: present
+
+    - name: set credentials of aws
+      ec2_instance_facts:
+        aws_access_key: "AKIA3XGRYBXM6RFXIZOC"
+        aws_secret_key: "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"
+        region: "ap-south-1"
+      register: aws_output
+
+    - debug: msg="aws output {{aws_output.instances[0]}}"
+
+
+    # - name: Store file into /tmp/fetched/host.example.com/tmp/somefile
+    #   become_user: ubuntu
+    #   fetch:
+    #     src: ~/.ssh/authorized_keys
+    #     dest: /tmp/keys
+    #     flat: yes
+
+        # fail_on_missing: no
+    # - name: Run a script only if file.txt does not exist on the remote node
+    #   script:  print.sh
+    #   args:
+    #     creates: /tmp/myfile.txt
