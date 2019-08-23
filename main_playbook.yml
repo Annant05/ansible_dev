@@ -7,11 +7,14 @@
     # HOST_TO_REPLACE: 
 
   hosts: "{{HOST_TO_REPLACE}}"
+  gather_facts: true
   become: true
 
+  
+
   tasks:
-    # STEP-1: to save the groups of target host to a json file.
-    # block local machine start 
+  #  # STEP-1: to save the groups of target host to a json file.
+  #  # block local machine start 
    - name: block executing in local machine as un-privileged user
      block:
      - name: copy the groups the host belongs to a json file in local machine 
@@ -43,6 +46,19 @@
          name: boto3
          state: present
 
+   # block to save the instance-id for the target instance   
+   - name: collect information about target ec2 instance.
+     block:
+     - name: get instance-id using curl aws meta-url
+       uri: 
+         url: "http://169.254.169.254/latest/meta-data/instance-id"
+         return_content: yes 
+       register: res_instance_id
+     - set_fact:
+         target_instance_id: "{{ res_instance_id.content  }}"   
+     - debug: msg="instance-id is  {{  target_instance_id  }}"
+
+
     # block to collect information of aws ec2 instance   
    - name: collect information about target ec2 instance.
      block:
@@ -51,16 +67,23 @@
          aws_access_key: "{{  AWS_ACCESS_KEY  }}"
          aws_secret_key: "{{  AWS_SECRET_KEY  }}"
          region: "{{  AWS_REGION  }}"
-       register: current_instance_facts
-    
+         instance_ids: ["{{  target_instance_id  }}"]       
+       register: res_instance
+       connection: local
+       become: False
+       run_once: True 
+     
+
     # this block saves the above response to a file in output folder 
    - name: block executing in local machine as un-privileged user
      block:
-     - name: copy the ec2 facts a json file in local machine 
+     - name: copy the ec2 facts a yaml file in local machine 
        copy:
-         content: "{{ current_instance_facts.instances[0] | to_yaml }}"
+         content: "{{ res_instance.instances[0] | to_yaml }}"
          dest: "{{  OUTPUT_DIRECTORY  }}/instance_facts.yml"
-     - debug: msg="response saved to file instance_facts.yml \n{{current_instance_facts.instances[0]  }}"
+     - set_fact:
+         instance_meta: "{{  res_instance.instances[0]  }}" 
+     - debug: msg="response saved to file instance_facts.yml \n var instance_meta "
 
      connection: local
      become: False
@@ -85,6 +108,80 @@
        - debug:
            msg: 'I caught an error, can do stuff here to fix it, :-)' 
    
-   
-      
+
+      # this block saves the above response to a file in output folder 
+   - name: block to create and launch a new ec2 instance
+     block:
+     - name: launch a new ec2 instance using the target host configuration 
+       # the below are temporary varaibles to create list. optimization needed
+       vars:
+         sec_groups: []         
+     
+       set_fact:
+         sec_groups: "{{ sec_groups }} + [ '{{ item.group_id }}' ]"
+         iam_role_attach:  "{{  instance_meta.iam_instance_profile.arn.split('/')[1]  }}"
+       loop:
+         "{{ instance_meta.security_groups }}"
+
+      #  launch a new ec2 and wait
+     - ec2:
+         aws_access_key: "{{  AWS_ACCESS_KEY  }}"
+         aws_secret_key: "{{  AWS_SECRET_KEY  }}"
+         region: "{{  AWS_REGION  }}"
+
+        #  this is base it will work for sure 
+         instance_type: "{{  instance_meta.instance_type }}"
+         image: "{{  instance_meta.image_id }}"
+         vpc_subnet_id: "{{  instance_meta.subnet_id }}"
+         zone: "{{ instance_meta.placement.availability_zone }}"
+         key_name: "{{  instance_meta.key_name  }}"                    #keypair
+         
+        # yes and no keys 
+         assign_public_ip: yes
+         wait: yes
+     
+        # below keys need to be first formatted  before use. (may cause errors) needs alternatives 
+         instance_profile_name: "{{  iam_role_attach  }}"
+        #  instance_tags:  instance_meta.tags 
+        #  group_id: sec_groups          
+       
+       register: ec2_launch_output
+       connection: local
+       become: False
+       run_once: True 
+     - debug: 
+         msg: "sec_groups is  {{ sec_groups | to_yaml }}" 
+     - debug:
+         msg: "Launch Output:  {{ ec2_launch_output }}"     
+
+     rescue:
+       - debug:
+           msg: 'I caught an error, there is error in this ofcourse :-)'
+          #  var: instance_meta.key_name
+
+  
+    # this block saves the above response to a file in output folder 
+  #  - name: block executing in local machine as un-privileged user
+  #    block:
+  #    - name: copy the ec2 facts a filter variables 
+  #      shell: "echo \"{{ item.group_id }}\" >> \"{{ OUTPUT_DIRECTORY }}\"/test.yml"
+  #      loop:
+  #        "{{ instance_meta.security_groups }}"
+
+  #   #  - set_fact:
+  #   #      instance_meta: "{{  res_instance.instances[0]  }}" 
+  #    - debug: msg="response saved to file some_facttest.yml \n var instance_meta "
+
+  #    connection: local
+  #    become: False
+  #    run_once: True 
+  #    rescue:
+  #      - debug:
+  #          msg: 'I caught an error, can do stuff here to fix it, :-)'
+
+
+
+
+
+
 ...

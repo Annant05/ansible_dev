@@ -2,3 +2,12 @@ outputs/authorized_keys
 outputs/instance_facts.yml
 outputs/*
 outputs/groups.json
+venv/*
+mypythonenv/*
+molecule/*
+/.vscode/*
+venv/
+mypythonenv/
+molecule/
+/.vscode/
+.vscode/settings.json

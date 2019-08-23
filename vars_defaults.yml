@@ -1,7 +1,7 @@
 # Default vars for main_playbook.yml
 ---
 # host and other local variables to be changes
-HOST_TO_REPLACE: 13.126.138.186
+HOST_TO_REPLACE: "13.235.246.111" 
 BELONG_TO_GROUPS: "{{group_names}}"
 
 
