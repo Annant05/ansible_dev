@@ -15,3 +15,7 @@ default_launch.pem
 outputs/groups.json
 default_launch.pub
 outputs/groups.json
+tssh.sh
+testkey.yml
+test1.pem
+default_launch.pem.pub

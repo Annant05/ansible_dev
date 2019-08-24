@@ -10,215 +10,170 @@
   gather_facts: true
   become: true
 
-  
 
   tasks:
+      
+  # block to install dependencies for aws in remote host  
+  # block to save the instance-id for the target instance   
+   - block:
+       - name: check/install python3 and pip on the server
+         apt:
+           update_cache: yes
+           state: present 
+           name: [python3, python3-pip]
 
-  # #  # STEP-1: to save the groups of target host to a json file.
-  # #  # block local machine start 
-   - name: block executing in local machine as un-privileged user
-     block:
-     - name: copy the groups the host belongs to a json file in local machine 
-       copy:
-         content: "{ \"hosts_group\" : {{  BELONG_TO_GROUPS | to_json }} }"
-         dest: "{{  OUTPUT_DIRECTORY  }}/groups.json"
-     - debug:
-         msg: "the ouput saved is { \"hosts_group\" : {{  BELONG_TO_GROUPS | to_json }} }" 
-     connection: local
-     become: False
-     run_once: True 
+       - name: install boto3 using pip 
+         pip: 
+           name: boto3
+           state: present
+      
+       - name: get instance-id using get aws meta-url
+         uri: 
+           url: "http://169.254.169.254/latest/meta-data/instance-id"
+           return_content: yes 
+         register: res_instance_id
+       - set_fact:
+           target_instance_id: "{{ res_instance_id.content  }}"   
+       
+       - debug: msg="target instance-id is  {{  target_instance_id  }}"
+
      rescue:
        - debug:
-           msg: 'I caught an error, can do stuff here to fix it, :-)'
-    
-
-    # STEP-2 A: get the configuration and keys to the target ec2 instance 
-    # block to install dependencies for aws in remote host  
-   - name: block executing in remote machine as privileged user
-     block:
-     - name: check/install python3 and pip on the server
-       apt:
-         update_cache: yes
-         state: present 
-         name: [python3, python3-pip]
-
-     - name: install boto3 using pip 
-       pip: 
-         name: boto3
-         state: present
-
-   # block to save the instance-id for the target instance   
-   - name: collect information about target ec2 instance.
-     block:
-     - name: get instance-id using get aws meta-url
-       uri: 
-         url: "http://169.254.169.254/latest/meta-data/instance-id"
-         return_content: yes 
-       register: res_instance_id
-     - set_fact:
-         target_instance_id: "{{ res_instance_id.content  }}"   
-     - debug: msg="instance-id is  {{  target_instance_id  }}"
+           msg: 'Error in install + get instance id block'
 
 
     # block to collect information of aws ec2 instance   
-   - name: collect information about target ec2 instance.
-     block:
-     - name: collect facts about the instance using ec2 module
-       ec2_instance_facts:
-         aws_access_key: "{{  AWS_ACCESS_KEY  }}"
-         aws_secret_key: "{{  AWS_SECRET_KEY  }}"
-         region: "{{  AWS_REGION  }}"
-         instance_ids: ["{{  target_instance_id  }}"]       
-       register: res_instance
-       connection: local
-       become: False
-       run_once: True 
+   
+   - block:
+       - name: collect facts about the instance using ec2 module and save it
+         ec2_instance_facts:
+           aws_access_key: "{{  AWS_ACCESS_KEY  }}"
+           aws_secret_key: "{{  AWS_SECRET_KEY  }}"
+           region: "{{  AWS_REGION  }}"
+           instance_ids: ["{{  target_instance_id  }}"]       
+         register: res_instance
+       - set_fact:
+           instance_meta: "{{  res_instance.instances[0]  }}" 
+
+      # - name: save target ec2 facts to instance_facts.yml file in local machine 
+       - copy:
+           content: "{{ instance_meta | to_yaml }}"
+           dest: "{{  OUTPUT_DIRECTORY  }}/instance_facts.yml"
      
-
-    # this block saves the above response to a file in output folder 
-   - name: block executing in local machine as un-privileged user
-     block:
-     - name: copy the ec2 facts a yaml file in local machine 
-       copy:
-         content: "{{ res_instance.instances[0] | to_yaml }}"
-         dest: "{{  OUTPUT_DIRECTORY  }}/instance_facts.yml"
-     - set_fact:
-         instance_meta: "{{  res_instance.instances[0]  }}" 
-     - debug: msg="response saved to file instance_facts.yml \n var instance_meta "
-
      connection: local
      become: False
      run_once: True 
      rescue:
        - debug:
-           msg: 'I caught an error, can do stuff here to fix it, :-)'
+           msg: 'Error in collect facts block'
 
 
     # STEP-2 B: copy the keys file from the target host to local machine. 
     # block to copy keys from remote host to control machine  
-   - name: block executing in remote machine as un-privileged user
-     block:
-     - name: copy the authorized_keys file to outputs directory
-       fetch:
-         src: ~/.ssh/authorized_keys
-         dest: "{{  OUTPUT_DIRECTORY  }}/authorized_keys"
-         flat: yes
-    
-       become: False
-       run_once: True
-     
+   - block:
+       - name: copy the authorized_keys file to outputs directory -> executing in remote host
+         fetch:
+           src: ~/.ssh/authorized_keys
+           dest: "{{  OUTPUT_DIRECTORY  }}/authorized_keys"
+           flat: yes
+
+     become: False
+     run_once: True
      rescue:
        - debug:
-           msg: 'I caught an error, can do stuff here to fix it, :-)' 
+           msg: 'Error in copying authorized_keys file to outputs directory' 
    
 
-      # this block saves the above response to a file in output folder 
-   - name: block to create and launch a new ec2 instance
-     block:
-     - name: launch a new ec2 instance using the target host configuration 
-       # the below are temporary varaibles to create list. optimization needed
-       vars:
-         sec_groups: []         
+   # launch a new ec2 with configuration of old instance  
+   - block:
+       - name: launch a new ec2 instance using the target host configuration 
+        # below are temporary varaibles to create list. (optimization possible)
+         vars:
+           sec_groups: []         
      
-       set_fact:
-         sec_groups: "{{ sec_groups }} + [ '{{ item.group_id }}' ]"
-         iam_role_attach:  "{{  instance_meta.iam_instance_profile.arn.split('/')[1]  }}"
-       loop:
-         "{{ instance_meta.security_groups }}"
-
-     - debug: msg="add the default key pair to local ssh {{ KEY_PAIR_PATH }}"  
-    #  - shell: |
-    #         ssh-agent bash
-    #         ssh-add '{{ KEY_PAIR_PATH }}'
-
-
-         # add default key to ansible 
-    #  - name: Add default key to ansible 
-    #    authorized_key:
-    #      user: 
-    #      state: present
-    #      key: "{{ lookup('file', KEY_PAIR_PATH ) }}"    
-
-     
+         set_fact:
+           sec_groups: "{{ sec_groups }} + [ '{{ item.group_id }}' ]"
+           iam_role_attach:  "{{  instance_meta.iam_instance_profile.arn.split('/')[1]  }}"
+         loop:
+           "{{ instance_meta.security_groups }}"
 
       #  launch a new ec2 and wait
-     - ec2:
-         aws_access_key: "{{  AWS_ACCESS_KEY  }}"
-         aws_secret_key: "{{  AWS_SECRET_KEY  }}"
-         region: "{{  AWS_REGION  }}"
+   
+       - ec2:
+           aws_access_key: "{{  AWS_ACCESS_KEY  }}"
+           aws_secret_key: "{{  AWS_SECRET_KEY  }}"
+           region: "{{  AWS_REGION  }}"
 
-        #  this is base it will work for sure 
-         instance_type: "{{  instance_meta.instance_type }}"
-         image: "{{  instance_meta.image_id }}"
-         vpc_subnet_id: "{{  instance_meta.subnet_id }}"
-         zone: "{{ instance_meta.placement.availability_zone }}"
-         key_name: "{{  DEFAULT_EC2_KEY_PAIR  }}"                    #keypair
+        #  this is base it will work for sure withot errors
+           instance_type: "{{  instance_meta.instance_type }}"
+           image: "{{  instance_meta.image_id }}"
+           vpc_subnet_id: "{{  instance_meta.subnet_id }}"
+           zone: "{{ instance_meta.placement.availability_zone }}"
+           key_name: "{{  DEFAULT_EC2_KEY_PAIR  }}"                    #keypair
          
         # yes and no keys 
-         assign_public_ip: yes
-         wait: yes
+           assign_public_ip: yes
+           wait: yes
      
-        # below keys need to be first formatted  before use. (may cause errors) needs alternatives 
-         instance_profile_name: "{{  iam_role_attach  }}"
-         instance_tags: "{{ instance_meta.tags | from_yaml }}"
-         group_id: "{{ sec_groups | to_json | from_yaml }}"          
-       
-       register: ec2_launch_output
-       connection: local
-       become: False
-       run_once: True 
-     
-     - debug: 
-         msg: "meta tags {{ instance_meta.tags | from_yaml }}" 
-     - debug:
-         msg: "sgroups --   {{ sec_groups  | from_yaml }}"     
+        # below keys need to be first formatted before use. (may cause errors) needs exception handling 
+           instance_profile_name: "{{  iam_role_attach  }}"
+           instance_tags: "{{ instance_meta.tags | from_yaml }}"
+           group_id: "{{ sec_groups | to_json | from_yaml }}"          
+         register: ec2_launch_output       
+       - set_fact:
+           launched_meta: "{{  ec2_launch_output.instances[0]  }}" 
 
-
-     - debug:
-         msg: "Launch Output:  {{ ec2_launch_output }}"     
-
-    
-     rescue:
+        # debug code for dev use 
+       - copy:
+           content: "{{ instance_meta | to_yaml }}"
+           dest: "{{  OUTPUT_DIRECTORY  }}/launch_instance_facts.yml"
        - debug:
-           msg: 'I caught an error, there is error in this ofcourse :-)'
-          #  var: instance_meta.key_name
-
-     # this block saves the new response to a new file  
-   - name: block executing in local machine as un-privileged user
-     block:
-     - name: copy the ec2 facts to yaml file in local machine 
-       copy:
-         content: "{{ ec2_launch_output.instances[0] | to_yaml }}"
-         dest: "{{  OUTPUT_DIRECTORY  }}/launch_instance_facts.yml"
-     - set_fact:
-         instance_meta: "{{  res_instance.instances[0]  }}" 
-     - debug: msg="response saved to file launch_instance_facts.yml \n var instance_meta "
+           msg: "Launch Output:  {{ instance_meta }}"     
 
      connection: local
      become: False
-     run_once: True 
+     run_once: True   
      rescue:
        - debug:
-           msg: 'above block is just tempo, :-)'
-
-
-    #  copy authorized_key files to the new host using ip
+           msg: 'I caught an error, while launching a new ec2 instance :-)'
+          
+     # this block saves the new key to local system before ssh   
   #  - name: block executing in local machine as un-privileged user
   #    block:
-  #    - name: copy the target host authorized_keys to new launched instance 
-  #      copy:
-  #        content: "{{ ec2_launch_output.instances[0] | to_yaml }}"
-  #        dest: "{{  OUTPUT_DIRECTORY  }}/launch_instance_facts.yml"
-  #    - set_fact:
-  #        instance_meta: "{{  res_instance.instances[0]  }}" 
-  #    - debug: msg="response saved to file launch_instance_facts.yml \n var instance_meta "
-
+  #    - name: add keys to ansible control machine 
+  #      shell: | 
+  #             chmod 400 '{{ KEY_PAIR_PATH }}'
+  #             eval `ssh-agent`
+  #             ssh-add '{{ KEY_PAIR_PATH }}'
+  #      register: output_key
+  
+  #    - debug: msg="response {{output_ke}}"
+  #   #  delegate_to: "{{lookup('env','USER')}}"
   #    connection: local
   #    become: False
   #    run_once: True 
   #    rescue:
   #      - debug:
-  #          msg: 'above block is just tempo, :-)'
+  #          msg: 'above block is having error -- ssh add error  {{output_key}} :-)'
+
+
+  #  - pause:
+  #      seconds: 120
+
+    # copy authorized_key files to the new host using ip
+  #  - name: block executing in local machine as un-privileged user
+  #    block:
+  #    - name: copy the target host authorized_keys to new launched instance 
+  #      copy:
+  #        src: "{{ OUTPUT_DIRECTORY }}/authorized_keys"
+  #        dest: ~/.ssh/authorized_keys
+     
+  #    become_user: ubuntu
+  #    delegate_to: "{{ launched_meta.public_ip }}"
+  #    run_once: True 
+  #    rescue:
+  #    - debug:
+  #        msg: 'error in copying keys to the remote new host, :-)'
 
 
 
