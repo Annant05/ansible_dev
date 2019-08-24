@@ -13,8 +13,9 @@
   
 
   tasks:
-  #  # STEP-1: to save the groups of target host to a json file.
-  #  # block local machine start 
+
+  # #  # STEP-1: to save the groups of target host to a json file.
+  # #  # block local machine start 
    - name: block executing in local machine as un-privileged user
      block:
      - name: copy the groups the host belongs to a json file in local machine 
@@ -49,7 +50,7 @@
    # block to save the instance-id for the target instance   
    - name: collect information about target ec2 instance.
      block:
-     - name: get instance-id using curl aws meta-url
+     - name: get instance-id using get aws meta-url
        uri: 
          url: "http://169.254.169.254/latest/meta-data/instance-id"
          return_content: yes 
@@ -102,8 +103,10 @@
          src: ~/.ssh/authorized_keys
          dest: "{{  OUTPUT_DIRECTORY  }}/authorized_keys"
          flat: yes
-     become: False
-     run_once: True
+    
+       become: False
+       run_once: True
+     
      rescue:
        - debug:
            msg: 'I caught an error, can do stuff here to fix it, :-)' 
@@ -123,6 +126,21 @@
        loop:
          "{{ instance_meta.security_groups }}"
 
+     - debug: msg="add the default key pair to local ssh {{ KEY_PAIR_PATH }}"  
+    #  - shell: |
+    #         ssh-agent bash
+    #         ssh-add '{{ KEY_PAIR_PATH }}'
+
+
+         # add default key to ansible 
+    #  - name: Add default key to ansible 
+    #    authorized_key:
+    #      user: 
+    #      state: present
+    #      key: "{{ lookup('file', KEY_PAIR_PATH ) }}"    
+
+     
+
       #  launch a new ec2 and wait
      - ec2:
          aws_access_key: "{{  AWS_ACCESS_KEY  }}"
@@ -134,7 +152,7 @@
          image: "{{  instance_meta.image_id }}"
          vpc_subnet_id: "{{  instance_meta.subnet_id }}"
          zone: "{{ instance_meta.placement.availability_zone }}"
-         key_name: "{{  instance_meta.key_name  }}"                    #keypair
+         key_name: "{{  DEFAULT_EC2_KEY_PAIR  }}"                    #keypair
          
         # yes and no keys 
          assign_public_ip: yes
@@ -142,42 +160,66 @@
      
         # below keys need to be first formatted  before use. (may cause errors) needs alternatives 
          instance_profile_name: "{{  iam_role_attach  }}"
-        #  instance_tags:  instance_meta.tags 
-        #  group_id: sec_groups          
+         instance_tags: "{{ instance_meta.tags | from_yaml }}"
+         group_id: "{{ sec_groups | to_json | from_yaml }}"          
        
        register: ec2_launch_output
        connection: local
        become: False
        run_once: True 
+     
      - debug: 
-         msg: "sec_groups is  {{ sec_groups | to_yaml }}" 
+         msg: "meta tags {{ instance_meta.tags | from_yaml }}" 
+     - debug:
+         msg: "sgroups --   {{ sec_groups  | from_yaml }}"     
+
+
      - debug:
          msg: "Launch Output:  {{ ec2_launch_output }}"     
 
+    
      rescue:
        - debug:
            msg: 'I caught an error, there is error in this ofcourse :-)'
           #  var: instance_meta.key_name
 
-  
-    # this block saves the above response to a file in output folder 
+     # this block saves the new response to a new file  
+   - name: block executing in local machine as un-privileged user
+     block:
+     - name: copy the ec2 facts to yaml file in local machine 
+       copy:
+         content: "{{ ec2_launch_output.instances[0] | to_yaml }}"
+         dest: "{{  OUTPUT_DIRECTORY  }}/launch_instance_facts.yml"
+     - set_fact:
+         instance_meta: "{{  res_instance.instances[0]  }}" 
+     - debug: msg="response saved to file launch_instance_facts.yml \n var instance_meta "
+
+     connection: local
+     become: False
+     run_once: True 
+     rescue:
+       - debug:
+           msg: 'above block is just tempo, :-)'
+
+
+    #  copy authorized_key files to the new host using ip
   #  - name: block executing in local machine as un-privileged user
   #    block:
-  #    - name: copy the ec2 facts a filter variables 
-  #      shell: "echo \"{{ item.group_id }}\" >> \"{{ OUTPUT_DIRECTORY }}\"/test.yml"
-  #      loop:
-  #        "{{ instance_meta.security_groups }}"
-
-  #   #  - set_fact:
-  #   #      instance_meta: "{{  res_instance.instances[0]  }}" 
-  #    - debug: msg="response saved to file some_facttest.yml \n var instance_meta "
+  #    - name: copy the target host authorized_keys to new launched instance 
+  #      copy:
+  #        content: "{{ ec2_launch_output.instances[0] | to_yaml }}"
+  #        dest: "{{  OUTPUT_DIRECTORY  }}/launch_instance_facts.yml"
+  #    - set_fact:
+  #        instance_meta: "{{  res_instance.instances[0]  }}" 
+  #    - debug: msg="response saved to file launch_instance_facts.yml \n var instance_meta "
 
   #    connection: local
   #    become: False
   #    run_once: True 
   #    rescue:
   #      - debug:
-  #          msg: 'I caught an error, can do stuff here to fix it, :-)'
+  #          msg: 'above block is just tempo, :-)'
+
 
 
 

@@ -1,11 +1,15 @@
 # Default vars for main_playbook.yml
 ---
 # host and other local variables to be changes
-HOST_TO_REPLACE: "13.235.246.111" 
+HOST_TO_REPLACE: "13.126.146.202" 
 BELONG_TO_GROUPS: "{{group_names}}"
 
+# key pair attached when launching new ec2
+DEFAULT_EC2_KEY_PAIR: "default_launch"
 
 # Playbook current directory: 
-PLAYBOOK_PWD: "/mnt/c/Users/Annant Gupta/Desktop/roleAnsible"
-OUTPUT_DIRECTORY: "/mnt/c/Users/Annant Gupta/Desktop/roleAnsible/outputs"
+PLAYBOOK_PWD: "{{ lookup('env', 'PWD') }}"
+OUTPUT_DIRECTORY: "{{ PLAYBOOK_PWD }}/outputs"
+KEY_PAIR_PATH: "{{ PLAYBOOK_PWD }}/{{DEFAULT_EC2_KEY_PAIR}}.pem"
+
 ...

@@ -11,3 +11,7 @@ mypythonenv/
 molecule/
 /.vscode/
 .vscode/settings.json
+default_launch.pem
+outputs/groups.json
+default_launch.pub
+outputs/groups.json

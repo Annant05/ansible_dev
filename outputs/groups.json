@@ -1,1 +1,1 @@
-{ "hosts_group" : ["db", "web"] }
+{ "hosts_group" : ["web"] }
