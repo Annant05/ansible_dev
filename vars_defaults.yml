@@ -1,7 +1,7 @@
 # Default vars for main_playbook.yml
 ---
 # host and other local variables to be changes
-HOST_TO_REPLACE: "13.127.155.219" 
+HOST_TO_REPLACE: "13.127.38.183" 
 BELONG_TO_GROUPS: "{{group_names}}"
 
 # key pair attached when launching new ec2

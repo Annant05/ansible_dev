@@ -1,6 +1,6 @@
 ---
 # all aws configuration stuff
-AWS_ACCESS_KEY: "AKIA3XGRYBXM6RFXIZOC" 
-AWS_SECRET_KEY: "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"
+AWS_ACCESS_KEY: "" 
+AWS_SECRET_KEY: ""
 AWS_REGION: "ap-south-1"
 ...

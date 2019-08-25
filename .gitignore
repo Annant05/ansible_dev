@@ -20,3 +20,4 @@ testkey.yml
 test1.pem
 default_launch.pem.pub
 25aug.pem
+ansible_ec2.zip
