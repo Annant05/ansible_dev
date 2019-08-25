@@ -6,9 +6,11 @@
     - vars_aws_config.yml
     # HOST_TO_REPLACE: 
 
-  hosts: "{{HOST_TO_REPLACE}}"
-  gather_facts: true
-  become: true
+  # ansible_ssh_private_key_file: "{{ KEY_PAIR_PATH }}"
+  hosts: localhost #"{{HOST_TO_REPLACE}}"
+  # gather_facts: true
+  connection: local
+  # become: true
 
 
   tasks:
@@ -20,7 +22,7 @@
          apt:
            update_cache: yes
            state: present 
-           name: [python3, python3-pip]
+           name: [python, python-pip, python3, python3-pip]
 
        - name: install boto3 using pip 
          pip: 
@@ -37,13 +39,31 @@
        
        - debug: msg="target instance-id is  {{  target_instance_id  }}"
 
+     delegate_to: "{{HOST_TO_REPLACE}}"
+     become: true
      rescue:
        - debug:
            msg: 'Error in install + get instance id block'
 
 
+
+  # this requires non-sudo user   
+   - block:
+       - name: copy the authorized_keys to outputs directory -> executing in remote host
+         fetch:
+           src: ~/.ssh/authorized_keys
+           dest: "{{  OUTPUT_DIRECTORY  }}/authorized_keys"
+           flat: yes
+
+     delegate_to: "{{HOST_TO_REPLACE}}"
+     become: false
+     rescue:
+       - debug:
+           msg: 'Error in auth_keys copy key block'
+
+
+
     # block to collect information of aws ec2 instance   
-   
    - block:
        - name: collect facts about the instance using ec2 module and save it
          ec2_instance_facts:
@@ -60,31 +80,14 @@
            content: "{{ instance_meta | to_yaml }}"
            dest: "{{  OUTPUT_DIRECTORY  }}/instance_facts.yml"
      
-     connection: local
-     become: False
      run_once: True 
      rescue:
        - debug:
-           msg: 'Error in collect facts block'
+           msg: 'Error in collect facts  block'
 
 
-    # STEP-2 B: copy the keys file from the target host to local machine. 
-    # block to copy keys from remote host to control machine  
-   - block:
-       - name: copy the authorized_keys file to outputs directory -> executing in remote host
-         fetch:
-           src: ~/.ssh/authorized_keys
-           dest: "{{  OUTPUT_DIRECTORY  }}/authorized_keys"
-           flat: yes
 
-     become: False
-     run_once: True
-     rescue:
-       - debug:
-           msg: 'Error in copying authorized_keys file to outputs directory' 
-   
-
-   # launch a new ec2 with configuration of old instance  
+  #  launch a new ec2 with configuration of old instance  
    - block:
        - name: launch a new ec2 instance using the target host configuration 
         # below are temporary varaibles to create list. (optimization possible)
@@ -93,7 +96,7 @@
      
          set_fact:
            sec_groups: "{{ sec_groups }} + [ '{{ item.group_id }}' ]"
-           iam_role_attach:  "{{  instance_meta.iam_instance_profile.arn.split('/')[1]  }}"
+          #  iam_role_attach:  "{{  instance_meta.iam_instance_profile.arn.split('/')[1] | default(null) }}"
          loop:
            "{{ instance_meta.security_groups }}"
 
@@ -109,53 +112,65 @@
            image: "{{  instance_meta.image_id }}"
            vpc_subnet_id: "{{  instance_meta.subnet_id }}"
            zone: "{{ instance_meta.placement.availability_zone }}"
-           key_name: "{{  DEFAULT_EC2_KEY_PAIR  }}"                    #keypair
+           key_name: "{{  instance_meta.key_name  }}"                    #keypair
          
         # yes and no keys 
            assign_public_ip: yes
            wait: yes
      
         # below keys need to be first formatted before use. (may cause errors) needs exception handling 
-           instance_profile_name: "{{  iam_role_attach  }}"
+          #  instance_profile_name: "{{  iam_role_attach  }}"
            instance_tags: "{{ instance_meta.tags | from_yaml }}"
            group_id: "{{ sec_groups | to_json | from_yaml }}"          
+         
+        #  save the output response as a fact
          register: ec2_launch_output       
        - set_fact:
            launched_meta: "{{  ec2_launch_output.instances[0]  }}" 
-
+           host_ip: "{{  ec2_launch_output.instances[0].public_ip  }}"
+       
         # debug code for dev use 
        - copy:
-           content: "{{ instance_meta | to_yaml }}"
+           content: "{{ launched_meta | to_yaml }}"
            dest: "{{  OUTPUT_DIRECTORY  }}/launch_instance_facts.yml"
-       - debug:
-           msg: "Launch Output:  {{ instance_meta }}"     
+      #  - debug:
+      #      msg: "Launch Output:  {{ launched_meta }}"     
 
-     connection: local
-     become: False
+       - name: check and wait 120-seconds for ssh on new machine to open 
+         wait_for:
+           timeout: 120
+      
+       - debug:
+           msg: "IP of new host-> {{ host_ip }}"     
+
      run_once: True   
      rescue:
        - debug:
-           msg: 'I caught an error, while launching a new ec2 instance :-)'
-          
-     # this block saves the new key to local system before ssh   
+           msg: 'ERR, while launching a new ec2 instance and ssh :-)'
+
+
+
+# check if ssh is avaliable or not  
+   - block:
+       - name: copy the target host authorized_keys to new launched instance 
+         copy:
+           src: "{{ OUTPUT_DIRECTORY }}/authorized_keys"
+           dest: ~/.ssh/authorized_keys
+    
+    #  check this before copying. the user must be configured for remote
+    #  become_user: ubuntu
+     delegate_to: "{{host_ip}}"
+     remote_user: ubuntu
+     run_once: True   
+     rescue:
+       - debug:
+           msg: ' err while copying key to remote new host :-)'
+
+           
+               # copy authorized_key files to the new host using ip
   #  - name: block executing in local machine as un-privileged user
   #    block:
-  #    - name: add keys to ansible control machine 
-  #      shell: | 
-  #             chmod 400 '{{ KEY_PAIR_PATH }}'
-  #             eval `ssh-agent`
-  #             ssh-add '{{ KEY_PAIR_PATH }}'
-  #      register: output_key
-  
-  #    - debug: msg="response {{output_ke}}"
-  #   #  delegate_to: "{{lookup('env','USER')}}"
-  #    connection: local
-  #    become: False
-  #    run_once: True 
-  #    rescue:
-  #      - debug:
-  #          msg: 'above block is having error -- ssh add error  {{output_key}} :-)'
-
+  #    
 
   #  - pause:
   #      seconds: 120

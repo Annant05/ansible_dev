@@ -1,11 +1,11 @@
 # Default vars for main_playbook.yml
 ---
 # host and other local variables to be changes
-HOST_TO_REPLACE: "13.126.247.36" 
+HOST_TO_REPLACE: "13.235.114.21" 
 BELONG_TO_GROUPS: "{{group_names}}"
 
 # key pair attached when launching new ec2
-DEFAULT_EC2_KEY_PAIR: "test1"
+DEFAULT_EC2_KEY_PAIR: "default_private_key"
 
 # Playbook current directory: 
 PLAYBOOK_PWD: "{{ lookup('env', 'PWD') }}"
