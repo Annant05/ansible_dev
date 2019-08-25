@@ -1,201 +1,181 @@
 ---
-- name: the main playbook to be executed 
+- name: the main playbook to be executed
 
   vars_files:
     - vars_defaults.yml
     - vars_aws_config.yml
-    # HOST_TO_REPLACE: 
+    # HOST_TO_REPLACE:
 
   # ansible_ssh_private_key_file: "{{ KEY_PAIR_PATH }}"
   hosts: localhost #"{{HOST_TO_REPLACE}}"
-  # gather_facts: true
+  gather_facts: true
   connection: local
   # become: true
 
-
   tasks:
-      
-  # block to install dependencies for aws in remote host  
-  # block to save the instance-id for the target instance   
-   - block:
-       - name: check/install python3 and pip on the server
-         apt:
-           update_cache: yes
-           state: present 
-           name: [python, python-pip, python3, python3-pip]
+    # block to install dependencies for aws in remote host
+    # block to save the instance-id for the target instance
+    - block:
+        - name: check/install python3 and pip on the server
+          apt:
+            update_cache: yes
+            state: present
+            name: [python, python-pip, python3, python3-pip]
 
-       - name: install boto3 using pip 
-         pip: 
-           name: boto3
-           state: present
-      
-       - name: get instance-id using get aws meta-url
-         uri: 
-           url: "http://169.254.169.254/latest/meta-data/instance-id"
-           return_content: yes 
-         register: res_instance_id
-       - set_fact:
-           target_instance_id: "{{ res_instance_id.content  }}"   
-       
-       - debug: msg="target instance-id is  {{  target_instance_id  }}"
+        - name: install boto3 using pip
+          pip:
+            name: boto3
+            state: present
 
-     delegate_to: "{{HOST_TO_REPLACE}}"
-     become: true
-     rescue:
-       - debug:
-           msg: 'Error in install + get instance id block'
+        - name: get instance-id using get aws meta-url
+          uri:
+            url: "http://169.254.169.254/latest/meta-data/instance-id"
+            return_content: yes
+          register: res_instance_id
+        - set_fact:
+            target_instance_id: "{{ res_instance_id.content  }}"
 
+        - debug: msg="target instance-id is  {{  target_instance_id  }}"
 
+      delegate_to: "{{HOST_TO_REPLACE}}"
+      become: true
+      rescue:
+        - debug:
+            msg: "Error in install + get instance id block"
 
-  # this requires non-sudo user   
-   - block:
-       - name: copy the authorized_keys to outputs directory -> executing in remote host
-         fetch:
-           src: ~/.ssh/authorized_keys
-           dest: "{{  OUTPUT_DIRECTORY  }}/authorized_keys"
-           flat: yes
+    # this requires non-sudo user
+    - block:
+        - name: copy the authorized_keys to outputs directory -> executing in remote host
+          fetch:
+            src: ~/.ssh/authorized_keys
+            dest: "{{  OUTPUT_DIRECTORY  }}/authorized_keys"
+            flat: yes
 
-     delegate_to: "{{HOST_TO_REPLACE}}"
-     become: false
-     rescue:
-       - debug:
-           msg: 'Error in auth_keys copy key block'
+      delegate_to: "{{HOST_TO_REPLACE}}"
+      become: false
+      rescue:
+        - debug:
+            msg: "Error in auth_keys copy key block"
 
+      # block to collect information of aws ec2 instance
+    - block:
+        - name: collect facts about the instance using ec2 module and save it
+          ec2_instance_facts:
+            aws_access_key: "{{  AWS_ACCESS_KEY  }}"
+            aws_secret_key: "{{  AWS_SECRET_KEY  }}"
+            region: "{{  AWS_REGION  }}"
+            instance_ids: ["{{  target_instance_id  }}"]
+          register: res_instance
+        - set_fact:
+            instance_meta: "{{  res_instance.instances[0]  }}"
 
+        # - name: save target ec2 facts to instance_facts.yml file in local machine
+        - copy:
+            content: "{{ instance_meta | to_yaml }}"
+            dest: "{{  OUTPUT_DIRECTORY  }}/instance_facts.yml"
 
-    # block to collect information of aws ec2 instance   
-   - block:
-       - name: collect facts about the instance using ec2 module and save it
-         ec2_instance_facts:
-           aws_access_key: "{{  AWS_ACCESS_KEY  }}"
-           aws_secret_key: "{{  AWS_SECRET_KEY  }}"
-           region: "{{  AWS_REGION  }}"
-           instance_ids: ["{{  target_instance_id  }}"]       
-         register: res_instance
-       - set_fact:
-           instance_meta: "{{  res_instance.instances[0]  }}" 
+      run_once: True
+      rescue:
+        - debug:
+            msg: "Error in collect facts block"
 
-      # - name: save target ec2 facts to instance_facts.yml file in local machine 
-       - copy:
-           content: "{{ instance_meta | to_yaml }}"
-           dest: "{{  OUTPUT_DIRECTORY  }}/instance_facts.yml"
-     
-     run_once: True 
-     rescue:
-       - debug:
-           msg: 'Error in collect facts  block'
+    #  launch a new ec2 with configuration of old instance
+    - block:
+        - name: launch a new ec2 instance using the target host configuration
+          # below are temporary varaibles to create list. (optimization possible)
+          vars:
+            sec_groups: []
 
+          set_fact:
+            sec_groups: "{{ sec_groups }} + [ '{{ item.group_id }}' ]"
+            #  iam_role_attach:  "{{  instance_meta.iam_instance_profile.arn.split('/')[1] | default(null) }}"
+          loop: "{{ instance_meta.security_groups }}"
 
+        #  launch a new ec2 and wait
 
-  #  launch a new ec2 with configuration of old instance  
-   - block:
-       - name: launch a new ec2 instance using the target host configuration 
-        # below are temporary varaibles to create list. (optimization possible)
-         vars:
-           sec_groups: []         
-     
-         set_fact:
-           sec_groups: "{{ sec_groups }} + [ '{{ item.group_id }}' ]"
-          #  iam_role_attach:  "{{  instance_meta.iam_instance_profile.arn.split('/')[1] | default(null) }}"
-         loop:
-           "{{ instance_meta.security_groups }}"
+        - ec2:
+            aws_access_key: "{{  AWS_ACCESS_KEY  }}"
+            aws_secret_key: "{{  AWS_SECRET_KEY  }}"
+            region: "{{  AWS_REGION  }}"
 
-      #  launch a new ec2 and wait
-   
-       - ec2:
-           aws_access_key: "{{  AWS_ACCESS_KEY  }}"
-           aws_secret_key: "{{  AWS_SECRET_KEY  }}"
-           region: "{{  AWS_REGION  }}"
+            #  this is base it will work for sure withot errors
+            instance_type: "{{  instance_meta.instance_type }}"
+            image: "{{  instance_meta.image_id }}"
+            vpc_subnet_id: "{{  instance_meta.subnet_id }}"
+            zone: "{{ instance_meta.placement.availability_zone }}"
+            key_name: "{{  instance_meta.key_name  }}" #keypair
 
-        #  this is base it will work for sure withot errors
-           instance_type: "{{  instance_meta.instance_type }}"
-           image: "{{  instance_meta.image_id }}"
-           vpc_subnet_id: "{{  instance_meta.subnet_id }}"
-           zone: "{{ instance_meta.placement.availability_zone }}"
-           key_name: "{{  instance_meta.key_name  }}"                    #keypair
-         
-        # yes and no keys 
-           assign_public_ip: yes
-           wait: yes
-     
-        # below keys need to be first formatted before use. (may cause errors) needs exception handling 
-          #  instance_profile_name: "{{  iam_role_attach  }}"
-           instance_tags: "{{ instance_meta.tags | from_yaml }}"
-           group_id: "{{ sec_groups | to_json | from_yaml }}"          
-         
-        #  save the output response as a fact
-         register: ec2_launch_output       
-       - set_fact:
-           launched_meta: "{{  ec2_launch_output.instances[0]  }}" 
-           host_ip: "{{  ec2_launch_output.instances[0].public_ip  }}"
-       
-        # debug code for dev use 
-       - copy:
-           content: "{{ launched_meta | to_yaml }}"
-           dest: "{{  OUTPUT_DIRECTORY  }}/launch_instance_facts.yml"
-      #  - debug:
-      #      msg: "Launch Output:  {{ launched_meta }}"     
+            # yes and no keys
+            assign_public_ip: yes
+            wait: yes
 
-       - name: check and wait 120-seconds for ssh on new machine to open 
-         wait_for:
-           timeout: 120
-      
-       - debug:
-           msg: "IP of new host-> {{ host_ip }}"     
+            # below keys need to be first formatted before use. (may cause errors) needs exception handling
+            #  instance_profile_name: "{{  iam_role_attach  }}"
+            instance_tags: "{{ instance_meta.tags | from_yaml }}"
+            group_id: "{{ sec_groups | to_json | from_yaml }}"
 
-     run_once: True   
-     rescue:
-       - debug:
-           msg: 'ERR, while launching a new ec2 instance and ssh :-)'
+          #  save the output response as a fact
+          register: ec2_launch_output
+        - set_fact:
+            launched_meta: "{{  ec2_launch_output.instances[0]  }}"
+            host_ip: "{{  ec2_launch_output.instances[0].public_ip  }}"
+          # debug code for dev use
+        - copy:
+            content: "{{ launched_meta | to_yaml }}"
+            dest: "{{  OUTPUT_DIRECTORY  }}/launch_instance_facts.yml"
+        #  - debug:
+        #      msg: "Launch Output:  {{ launched_meta }}"
 
+        - name: check and wait 120-seconds for ssh on new machine to open
+          wait_for:
+            timeout: 120
 
+        - debug:
+            msg: "IP of new host-> {{ host_ip }}"
 
-  # check if ssh is avaliable or not  
-   - block:
-       - name: copy the target host authorized_keys to new launched instance 
-         copy:
-           src: "{{ OUTPUT_DIRECTORY }}/authorized_keys"
-           dest: ~/.ssh/authorized_keys
-    
-    #  check this before copying. the user must be configured for remote
-    #  become_user: ubuntu
-     delegate_to: "{{host_ip}}"
-     remote_user: ubuntu
-     run_once: True   
-     rescue:
-       - debug:
-           msg: ' err while copying key to remote new host :-)'
+      run_once: True
+      rescue:
+        - debug:
+            msg: "ERR, while launching a new ec2 instance and ssh :-)"
 
+    # check if ssh is avaliable or not
+    - block:
+        - name: copy the target host authorized_keys to new launched instance
+          copy:
+            src: "{{ OUTPUT_DIRECTORY }}/authorized_keys"
+            dest: ~/.ssh/authorized_keys
 
+      #  check this before copying. the user must be configured for remote
+      #  become_user: ubuntu
+      delegate_to: "{{host_ip}}"
+      remote_user: ubuntu
+      run_once: True
+      rescue:
+        - debug:
+            msg: " err while copying key to remote new host :-)"
 
-   # replace the dns entry in route53 and inventory file
-   - block:
-       - name: copy the target host authorized_keys to new launched instance 
-         copy:
-           src: "{{ OUTPUT_DIRECTORY }}/authorized_keys"
-           dest: ~/.ssh/authorized_keys
-    
-    #  check this before copying. the user must be configured for remote
-    #  become_user: ubuntu
-     delegate_to: "{{host_ip}}"
-     remote_user: ubuntu
-     run_once: True   
-     rescue:
-       - debug:
-           msg: 'err while copying key to remote new host :-)'
- 
-     #  replace the old host address with new address in inventory
-   - block:
-       - name: replace the old host address with new address in inventory
-         shell: sed -i 's/{{HOST_TO_REPLACE}}/{{host_ip}}/g' '{{PLAYBOOK_PWD}}/myhosts'
+    # replace the dns entry in route53 and inventory file
+    - block:
+        - name: copy the target host authorized_keys to new launched instance
+          copy:
+            src: "{{ OUTPUT_DIRECTORY }}/authorized_keys"
+            dest: ~/.ssh/authorized_keys
 
-     run_once: True   
-     rescue:
-       - debug:
-           msg: ' err while copying key to remote new host :-)'
+      #  check this before copying. the user must be configured for remote
+      #  become_user: ubuntu
+      delegate_to: "{{host_ip}}"
+      remote_user: ubuntu
+      run_once: True
+      rescue:
+        - debug:
+            msg: "err while copying key to remote new host :-)"
 
+      #  replace the old host address with new address in inventory
+    - block:
+        - name: replace the old host address with new address in inventory
+          shell: sed -i 's/{{HOST_TO_REPLACE}}/{{host_ip}}/g' '{{PLAYBOOK_PWD}}/myhosts'  '{{PLAYBOOK_PWD}}/vars_defaults.yml'
 
-
-
-
-...
+      run_once: True
+      rescue:
+        - debug:
+            msg: " err while copying key to remote new host :-)"

@@ -1,7 +1,7 @@
 [web]
-13.235.33.183 ansible_ssh_user=ubuntu
+13.127.38.183 ansible_ssh_user=ubuntu
 [db]
-13.232.18.254 ansible_ssh_user=ubuntu
+13.127.38.183 ansible_ssh_user=ubuntu
 [mygroup]
 13.235.33.183 ansible_ssh_user=ubuntu
 [none]
