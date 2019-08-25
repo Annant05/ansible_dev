@@ -150,7 +150,7 @@
 
 
 
-# check if ssh is avaliable or not  
+  # check if ssh is avaliable or not  
    - block:
        - name: copy the target host authorized_keys to new launched instance 
          copy:
@@ -166,31 +166,33 @@
        - debug:
            msg: ' err while copying key to remote new host :-)'
 
-           
-               # copy authorized_key files to the new host using ip
-  #  - name: block executing in local machine as un-privileged user
-  #    block:
-  #    
-
-  #  - pause:
-  #      seconds: 120
-
-    # copy authorized_key files to the new host using ip
-  #  - name: block executing in local machine as un-privileged user
-  #    block:
-  #    - name: copy the target host authorized_keys to new launched instance 
-  #      copy:
-  #        src: "{{ OUTPUT_DIRECTORY }}/authorized_keys"
-  #        dest: ~/.ssh/authorized_keys
-     
-  #    become_user: ubuntu
-  #    delegate_to: "{{ launched_meta.public_ip }}"
-  #    run_once: True 
-  #    rescue:
-  #    - debug:
-  #        msg: 'error in copying keys to the remote new host, :-)'
 
 
+   # replace the dns entry in route53 and inventory file
+   - block:
+       - name: copy the target host authorized_keys to new launched instance 
+         copy:
+           src: "{{ OUTPUT_DIRECTORY }}/authorized_keys"
+           dest: ~/.ssh/authorized_keys
+    
+    #  check this before copying. the user must be configured for remote
+    #  become_user: ubuntu
+     delegate_to: "{{host_ip}}"
+     remote_user: ubuntu
+     run_once: True   
+     rescue:
+       - debug:
+           msg: 'err while copying key to remote new host :-)'
+ 
+     #  replace the old host address with new address in inventory
+   - block:
+       - name: replace the old host address with new address in inventory
+         shell: sed -i 's/{{HOST_TO_REPLACE}}/{{host_ip}}/g' '{{PLAYBOOK_PWD}}/myhosts'
+
+     run_once: True   
+     rescue:
+       - debug:
+           msg: ' err while copying key to remote new host :-)'
 
 
 
