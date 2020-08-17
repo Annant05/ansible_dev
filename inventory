@@ -1,0 +1,10 @@
+# bastion ansible_host=
+
+[servers]
+node1 ansible_host=172.31.22.251
+node2 ansible_host=172.31.16.189
+node3 ansible_host=172.31.18.90	
+node4 ansible_host=172.31.17.74	
+
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
